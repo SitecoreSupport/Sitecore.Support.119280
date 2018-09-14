@@ -13,6 +13,7 @@ using Sitecore.Sites;
 using Sitecore.Text;
 using Sitecore.Web.UI.Sheer;
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Globalization;
 using Sitecore.Web;
@@ -91,20 +92,44 @@ namespace Sitecore.Support.Shell.Applications.WebEdit.Commands
                             }
                             previewSiteContext = LinkManager.GetPreviewSiteContext(item);
                         }
-                        //fix for 119280. If the current item is null and previewSiteContext has not been resolved, we try to resolve site context by using current host name only
-                        if (previewSiteContext == null)
+                        #region fix for 253834. If the current item is null and previewSiteContext has not been resolved, we try to resolve site context by using current host name only
+
+                        List<SiteInfo> sites = SiteContextFactory.Sites;
+                        foreach (SiteInfo current in sites)
                         {
-                            System.Collections.Generic.List<SiteInfo> sites = SiteContextFactory.Sites;
-                            foreach (SiteInfo current in sites)
+                            string[] array = current.HostName.ToLowerInvariant().Split(new char[]
                             {
-                                if (current.HostName.ToLowerInvariant().Equals(WebUtil.GetRequestUri().Host.ToLowerInvariant()))
+                                '|'
+                            }, StringSplitOptions.RemoveEmptyEntries);
+
+                            foreach (string hostname in array)
+                            {
+                                if (hostname.Contains("*"))
+                                {
+                                    List<string[]> hostnameArray = new List<string[]>();
+                                    hostnameArray.Add(Sitecore.Text.WildCardParser.GetParts(hostname));
+                                    foreach (var host in hostnameArray)
+                                    {
+                                        if (WildCardParser.Matches(WebUtil.GetRequestUri().Host.ToLowerInvariant(), host))
+                                        {
+                                            previewSiteContext = new SiteContext(current);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (hostname.Trim().Equals(WebUtil.GetRequestUri().Host.ToLowerInvariant()))
                                 {
                                     previewSiteContext = new SiteContext(current);
                                     break;
                                 }
+
                             }
                         }
+
                         SiteContext site = previewSiteContext ?? Factory.GetSite(Settings.Preview.DefaultSite);
+                        //SiteContext site = Factory.GetSite(Settings.Preview.DefaultSite);
+                        #endregion
                         if (site == null)
                         {
                             object[] parameters = new object[] {Settings.Preview.DefaultSite};
